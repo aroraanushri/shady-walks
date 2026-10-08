@@ -4,7 +4,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.mapillary import MapillaryClient, MapillaryError, parse_images, spatial_sample
+from app.mapillary import (
+    MapillaryClient,
+    MapillaryError,
+    parse_images,
+    spatial_sample,
+    validate_bbox,
+)
 
 
 def test_parse_images_preserves_metadata() -> None:
@@ -91,3 +97,18 @@ def test_search_reports_api_failure(tmp_path: Path) -> None:
 
     with pytest.raises(MapillaryError, match="Mapillary request failed"):
         client.search((73.8, 18.5, 73.9, 18.6))
+
+
+def test_bbox_and_pagination_are_bounded(tmp_path: Path) -> None:
+    with pytest.raises(MapillaryError, match="too large"):
+        validate_bbox((73.0, 18.0, 74.0, 19.0))
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": [], "paging": {"next": "https://evil.example/images?page=2"}},
+        )
+
+    client = MapillaryClient("token", tmp_path, transport=httpx.MockTransport(handler))
+    with pytest.raises(MapillaryError, match="unsafe"):
+        client.search((73.8, 18.5, 73.81, 18.51))

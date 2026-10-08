@@ -26,7 +26,7 @@ type MapillaryImage = {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
-function App() {
+export function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -80,14 +80,15 @@ function App() {
           <p className="eyebrow">Pune pilot · VIT Pune</p>
           <h1>See the green<br /><em>between the steps.</em></h1>
           <p className="lede">Upload a street-level photograph and measure observed vegetation with a local SegFormer model.</p>
-          <label className="upload">
+          <label className="upload" data-testid="upload-control">
             {busy ? "Analyzing image…" : "Upload a photograph"}
             <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void analyze(file);
             }} />
           </label>
-          {error && <p className="error">{error}</p>}
+          {busy && <p role="status">Analyzing image…</p>}
+          {error && <p role="alert" className="error">{error}</p>}
         </div>
         <MapPanel images={images} selectedImage={selectedImage} onSelect={setSelectedImage} onLoad={loadImages} error={mapError} />
       </section>
@@ -96,13 +97,22 @@ function App() {
         <img src={selectedImage.thumb_1024_url} alt={`Mapillary street image ${selectedImage.id}`} />
         <p>Captured: {selectedImage.captured_at ? new Date(selectedImage.captured_at).toLocaleString() : "Unknown date"} · Coordinates: {selectedImage.latitude.toFixed(5)}, {selectedImage.longitude.toFixed(5)}</p>
         <button className="secondary" onClick={async () => {
-          const response = await fetch(selectedImage.thumb_1024_url!);
-          const blob = await response.blob();
-          await analyze(new File([blob], `mapillary-${selectedImage.id}.jpg`, { type: blob.type }));
+          setBusy(true);
+          setError("");
+          try {
+            const response = await fetch(`${API_URL}/api/analyze/mapillary/${selectedImage.id}`, { method: "POST" });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail ?? "Mapillary analysis failed.");
+            setAnalysis(payload);
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : "Mapillary analysis failed.");
+          } finally {
+            setBusy(false);
+          }
         }}>Analyze this image</button>
       </section>}
       {analysis && <section className="result">
-        <div><p className="eyebrow">Observed result · {analysis.filename}</p><h2>{analysis.gvi_percent}% <span>visible greenery</span></h2><p>{analysis.limitation}</p><dl><div><dt>Vegetation pixels</dt><dd>{analysis.vegetation_pixels.toLocaleString()}</dd></div><div><dt>Valid pixels</dt><dd>{analysis.valid_pixels.toLocaleString()}</dd></div><div><dt>Runtime</dt><dd>{analysis.device}</dd></div></dl><p className="labels">Detected classes: {analysis.vegetation_labels.join(", ") || "none observed"}</p></div>
+        <div><p className="eyebrow">Observed result · {analysis.filename}</p><h2 data-testid="gvi-result">{analysis.gvi_percent}% <span>visible greenery</span></h2><p>{analysis.limitation}</p><dl><div><dt>Vegetation pixels</dt><dd>{analysis.vegetation_pixels.toLocaleString()}</dd></div><div><dt>Valid pixels</dt><dd>{analysis.valid_pixels.toLocaleString()}</dd></div><div><dt>Runtime</dt><dd>{analysis.device}</dd></div></dl><p className="labels">Detected classes: {analysis.vegetation_labels.join(", ") || "none observed"}</p></div>
         <img src={`data:image/png;base64,${analysis.overlay_png_base64}`} alt="Segmentation overlay showing observed vegetation" />
       </section>}
       <section id="about" className="about"><p className="eyebrow">Built for honest exploration</p><h2>Observed, not imagined.</h2><p>ShadeShift distinguishes visible vegetation from unknown areas. It never turns a pixel score into a promise about temperature, shade, or comfort.</p></section>
@@ -149,4 +159,7 @@ function MapPanel({ images, selectedImage, onSelect, onLoad, error }: {
   </div>;
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+const root = document.getElementById("root");
+if (root) {
+  createRoot(root).render(<StrictMode><App /></StrictMode>);
+}

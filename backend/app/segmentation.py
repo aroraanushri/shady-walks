@@ -70,14 +70,21 @@ class SegFormerSegmenter:
         assert self._processor is not None and self._model is not None and self._device is not None
         inputs = self._processor(images=image, return_tensors="pt").to(self._device)
         with torch.inference_mode():
-            logits = self._model(**inputs).logits
-        mask = logits.argmax(dim=1)[0].detach().cpu().numpy().astype(np.int16)
-        mask = np.asarray(
-            Image.fromarray(mask.astype(np.int32), mode="I").resize(
-                image.size, Image.Resampling.NEAREST
-            ),
-            dtype=np.int16,
-        )
+            outputs = self._model(**inputs)
+        target_size = [(image.height, image.width)]
+        if hasattr(self._processor, "post_process_semantic_segmentation"):
+            mask_tensor = self._processor.post_process_semantic_segmentation(
+                outputs, target_sizes=target_size
+            )[0]
+            mask = mask_tensor.detach().cpu().numpy().astype(np.int16)
+        else:
+            logits = torch.nn.functional.interpolate(
+                outputs.logits,
+                size=(image.height, image.width),
+                mode="bilinear",
+                align_corners=False,
+            )
+            mask = logits.argmax(dim=1)[0].detach().cpu().numpy().astype(np.int16)
         id2label = self._model.config.id2label
         vegetation_values = {
             int(index)
@@ -107,4 +114,4 @@ def render_overlay(
 ) -> Image.Image:
     overlay = image.convert("RGBA").resize((mask.shape[1], mask.shape[0]))
     vegetation = render_mask(mask, vegetation_values)
-    return Image.blend(overlay, vegetation, alpha=0.42)
+    return Image.alpha_composite(overlay, vegetation)
