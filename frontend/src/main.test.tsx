@@ -40,4 +40,33 @@ describe("ShadeShift upload workflow", () => {
     });
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Mapillary analysis failed."));
   });
+
+  it("selects a Mapillary marker and displays its analysis", async () => {
+    const image = {
+      id: "123456789",
+      longitude: 73.8567,
+      latitude: 18.5204,
+      captured_at: Date.now(),
+      thumb_1024_url: "https://scontent.example.fbcdn.net/image.jpg",
+      attribution: "Mapillary / tester",
+    };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ images: [image], count: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(analysis), { status: 200 })));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Marker" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Analyze this image" }));
+
+    expect(await screen.findByTestId("gvi-result")).toHaveTextContent("22.14%");
+  });
+
+  it("shows Mapillary loading failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Imagery unavailable." }), { status: 503 }),
+    ));
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("Imagery unavailable.")).toBeInTheDocument());
+  });
 });
