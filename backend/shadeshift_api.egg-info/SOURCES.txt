@@ -1,0 +1,12 @@
+pyproject.toml
+app/__init__.py
+app/main.py
+app/schemas.py
+app/segmentation.py
+shadeshift_api.egg-info/PKG-INFO
+shadeshift_api.egg-info/SOURCES.txt
+shadeshift_api.egg-info/dependency_links.txt
+shadeshift_api.egg-info/requires.txt
+shadeshift_api.egg-info/top_level.txt
+tests/test_api.py
+tests/test_segmentation.py
