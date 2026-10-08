@@ -7,6 +7,8 @@ __pycache__/
 *.tsbuildinfo
 backend/uploads/
 backend/results/
+backend/cache/
+backend/.local-results/
 frontend/node_modules/
 frontend/dist/
 .env

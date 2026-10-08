@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import io
+import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 
+from .mapillary import MapillaryClient, MapillaryError
 from .schemas import AnalysisResponse
 from .segmentation import (
     SegFormerSegmenter,
@@ -14,14 +19,41 @@ from .segmentation import (
     render_overlay,
 )
 
+load_dotenv(Path(__file__).parents[1] / ".env")
+
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 segmenter = SegFormerSegmenter()
 app = FastAPI(title="ShadeShift API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+mapillary = MapillaryClient(
+    os.getenv("MAPILLARY_TOKEN"),
+    Path(__file__).parents[1] / "cache" / "mapillary",
+)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "shadeshift-api"}
+
+
+@app.get("/api/mapillary/images")
+def mapillary_images(
+    west: float,
+    south: float,
+    east: float,
+    north: float,
+    limit: int = 10,
+) -> dict[str, object]:
+    try:
+        images = mapillary.search((west, south, east, north), limit=limit)
+    except MapillaryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"images": [image.__dict__ for image in images], "count": len(images)}
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
